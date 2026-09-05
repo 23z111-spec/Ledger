@@ -154,3 +154,36 @@ def attention_score(events: list[ChangeEvent], is_new: bool) -> int:
 
 def events_to_dicts(events: list[ChangeEvent]):
     return [asdict(e) for e in events]
+
+
+def sector_context(current: dict, peers: list[dict]) -> dict:
+    """Explain whether this symbol's move is shared by its sector peers."""
+    same_sector = [peer for peer in peers if peer.get("sector") == current.get("sector") and peer.get("symbol") != current.get("symbol")]
+    movers = [peer for peer in same_sector if abs((peer["price"] - peer["prev_close"]) / peer["prev_close"]) >= 0.01]
+    current_move = (current["price"] - current["prev_close"]) / current["prev_close"] if current["prev_close"] else 0
+    direction = "up" if current_move >= 0 else "down"
+    aligned = [peer for peer in movers if ((peer["price"] - peer["prev_close"]) >= 0) == (current_move >= 0)]
+    high_count = sum(1 for peer in same_sector if peer["price"] >= peer["period_high"] * 0.9995)
+    sector = current.get("sector", "the sector")
+    total = len(same_sector) + 1
+
+    if not same_sector:
+        summary = f"No {sector} peers are available for comparison yet."
+        kind = "no_peers"
+    elif len(aligned) >= max(1, (len(same_sector) + 1) // 2):
+        summary = f"Sector-wide move: {len(aligned)} of {total} {sector} names are moving {direction}."
+        kind = "sector_wide"
+    else:
+        summary = f"Stock-specific move: only {len(aligned)} of {total} {sector} names are moving {direction}."
+        kind = "stock_specific"
+
+    return {
+        "kind": kind,
+        "summary": summary,
+        "sector": sector,
+        "peer_count": len(same_sector),
+        "aligned_count": len(aligned),
+        "movers_count": len(movers),
+        "at_high_count": high_count,
+        "total_count": total,
+    }

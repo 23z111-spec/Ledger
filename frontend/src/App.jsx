@@ -16,12 +16,10 @@ function pctChange(price, base) {
 
 function timeAgo(iso) {
   if (!iso) return "never";
-  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  return `${h}h ago`;
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 60 ? `${minutes}m ago` : `${Math.floor(minutes / 60)}h ago`;
 }
 
 const FEED_LABEL = { live: "Live", delayed: "Delayed", stale: "Stale" };
@@ -29,139 +27,28 @@ const FEED_COLOR = { live: "var(--gain)", delayed: "var(--amber)", stale: "var(-
 const FEED_BG = { live: "var(--gain-tint)", delayed: "var(--amber-tint)", stale: "var(--loss-tint)" };
 
 function Logo({ size = 30 }) {
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: size * 0.3, background: "var(--brand)",
-      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-    }}>
-      <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none">
-        <path d="M3 15 L9 9 L13 13 L21 5" stroke="white" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
+  return <div className="logo" style={{ width: size, height: size, borderRadius: size * 0.3 }}><svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none"><path d="M3 15 9 9l4 4 8-8" stroke="white" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg></div>;
 }
 
-function ChangePill({ pct }) {
+function ChangePill({ pct, large = false }) {
   const up = pct >= 0;
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 600,
-      padding: "3px 8px", borderRadius: 6, color: up ? "var(--gain)" : "var(--loss)",
-      background: up ? "var(--gain-tint)" : "var(--loss-tint)",
-    }}>
-      {up ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%
-    </span>
-  );
+  return <span className={`change-pill ${large ? "change-pill-large" : ""} ${up ? "positive" : "negative"}`}>{up ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%</span>;
 }
-
-// ---------- login ----------
 
 function LoginGate({ onLogin }) {
   const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setBusy(true);
-    setErr("");
-    try {
-      const user = await api.createUser(name.trim());
-      localStorage.setItem("watchlist_user", JSON.stringify(user));
-      onLogin(user);
-    } catch (e2) {
-      setErr("Couldn't reach the backend — is it running on port 8000?");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{
-      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "var(--canvas)", padding: 24,
-    }}>
-      <form onSubmit={submit} style={{
-        width: 380, textAlign: "left", background: "var(--panel)", borderRadius: 14,
-        padding: "36px 32px", boxShadow: "var(--shadow-card)", border: "1px solid var(--border)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <Logo size={34} />
-          <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>Ledger</span>
-        </div>
-        <p style={{ color: "var(--text-muted)", fontSize: 14, lineHeight: 1.5, marginTop: 0, marginBottom: 24 }}>
-          A watchlist that remembers what you last saw, so it can tell you what actually changed.
-        </p>
-        <label style={{ display: "block", fontSize: 13, color: "var(--text-muted)", marginBottom: 6, fontWeight: 500 }}>
-          Pick a name to sign in with
-        </label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. priya"
-          style={{
-            width: "100%", padding: "11px 14px", borderRadius: 8, border: "1px solid var(--border)",
-            background: "var(--canvas)", fontSize: 15, marginBottom: 14,
-          }}
-        />
-        <button type="submit" disabled={busy} style={{
-          width: "100%", padding: "11px 12px", borderRadius: 8, border: "none",
-          background: "var(--brand)", color: "#ffffff", fontWeight: 600, fontSize: 14.5, cursor: "pointer",
-        }}>
-          {busy ? "Signing in…" : "Continue"}
-        </button>
-        {err && <p style={{ color: "var(--loss)", fontSize: 13, marginTop: 10 }}>{err}</p>}
-        <p style={{ color: "var(--text-faint)", fontSize: 12, marginTop: 18, lineHeight: 1.5 }}>
-          No password — this identifies your watchlist so it follows you across devices.
-          Sign in with the same name anywhere to pick up where you left off.
-        </p>
-      </form>
-    </div>
-  );
+  async function submit(event) { event.preventDefault(); if (!name.trim()) return; const user = await api.createUser(name.trim()); localStorage.setItem("watchlist_user", JSON.stringify(user)); onLogin(user); }
+  return <div className="login-page"><form className="login-card" onSubmit={submit}><div className="brand-lockup"><Logo size={36} /><span>Ledger</span></div><p className="muted login-copy">A watchlist that remembers what you last saw, so it can tell you what actually changed.</p><label className="field-label" htmlFor="name">Pick a name to sign in with</label><input id="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. priya" /><button className="primary-button full-button" type="submit">Continue</button><p className="fine-print">No password. This identifies your watchlist so it follows you across devices.</p></form></div>;
 }
 
-// ---------- add symbol ----------
+function AddSymbol({ userId, onAdded, existingSymbols, compact = false }) {
+  const [query, setQuery] = useState(""); const [results, setResults] = useState([]); const [open, setOpen] = useState(false);
+  useEffect(() => { let active = true; if (!query.trim()) { setResults([]); return undefined; } api.listSymbols(query).then((items) => { if (active) setResults(items); }); return () => { active = false; }; }, [query]);
+  async function add(symbol) { await api.addSymbol(userId, symbol); setQuery(""); setOpen(false); onAdded(); }
+  return <div className={`search-wrap ${compact ? "search-compact" : ""}`}><Icon name="search" size={16} /><input value={query} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} placeholder="Search stocks to add..." />{open && results.length > 0 && <div className="search-results">{results.map((result) => { const added = existingSymbols.has(result.symbol); return <button key={result.symbol} disabled={added} onClick={() => add(result.symbol)}><span><strong>{result.symbol}</strong><small>{result.name}</small></span><em>{added ? "Added" : result.sector}</em></button>; })}</div>}</div>;
+}
 
-function AddSymbol({ userId, onAdded, existingSymbols }) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState([]);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    if (!q.trim()) { setResults([]); return; }
-    api.listSymbols(q).then((r) => { if (active) setResults(r); });
-    return () => { active = false; };
-  }, [q]);
-
-  async function add(sym) {
-    await api.addSymbol(userId, sym);
-    setQ("");
-    setOpen(false);
-    onAdded();
-  }
-
-  return (
-    <div style={{ position: "relative", width: 320 }}>
-      <div style={{ position: "relative" }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{
-          position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none",
-        }}>
-          <circle cx="11" cy="11" r="7" stroke="#9aa0ab" strokeWidth="2" />
-          <path d="M20 20L16.5 16.5" stroke="#9aa0ab" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        <input
-          value={q}
-          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder="Search & add a symbol"
-          style={{
-            width: "100%", padding: "9px 14px 9px 34px", borderRadius: 8, border: "1px solid var(--border)",
-            background: "var(--canvas)", fontSize: 13.5,
-          }}
-        />
-      </div>
+/* stale digest implementation retained below only as a source reference
       {open && results.length > 0 && (
         <div style={{
           position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 10,
@@ -193,6 +80,8 @@ function AddSymbol({ userId, onAdded, existingSymbols }) {
     </div>
   );
 }
+
+*/
 
 // ---------- digest strip (Groww "index card" style) ----------
 
@@ -302,6 +191,32 @@ function Row({ item, history, onRemove, highlighted, rowRef }) {
   );
 }
 
+function Icon({ name, size = 18 }) {
+  const paths = { search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>, arrow: <><path d="M5 19 19 5" /><path d="M9 5h10v10" /></>, back: <path d="m15 18-6-6 6-6" />, eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" /><circle cx="12" cy="12" r="2.5" /></>, check: <path d="m5 12 4 4L19 6" /> };
+  return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
+function AttentionCard({ item, onOpen }) {
+  const since = item.is_new ? 0 : pctChange(item.price, item.last_seen_price);
+  const trendPoints = Array.from({ length: 12 }, (_, index) => {
+    const direction = since >= 0 ? 1 : -1;
+    const drift = direction * index * 0.0007;
+    const movement = Math.sin(index * 1.35) * 0.0018 + Math.sin(index * 2.4) * 0.0007;
+    return item.price * (1 - direction * 0.004 + drift + movement);
+  });
+  return <button className="attention-card" onClick={() => onOpen(item.symbol)}><div className="card-topline"><span className="eyebrow">{item.is_new ? "New on watchlist" : "Needs a look"}</span><span className="attention-score">{Math.round(item.attention_score || 0)}</span></div><div className="stock-heading"><div><strong>{item.symbol}</strong><small>{item.sector}</small></div><Sparkline points={trendPoints} width={64} height={26} color={since >= 0 ? "var(--gain)" : "var(--loss)"} /></div><div className="attention-price">₹{fmtMoney(item.price)} <ChangePill pct={since} /></div><p>{item.events?.[0]?.headline || "No meaningful change since your last visit"}</p>{item.sector_context && <div className={`sector-note ${item.sector_context.kind}`}>{item.sector_context.summary}</div>}<span className="card-link">View details <Icon name="arrow" size={14} /></span></button>;
+}
+
+function StockRow({ item, history, onRemove, onOpen }) {
+  const dayPct = pctChange(item.price, item.day_open);
+  return <tr onClick={() => onOpen(item.symbol)}><td><div className="stock-cell"><div className="ticker-mark">{item.symbol.slice(0, 1)}</div><div><strong>{item.symbol}</strong><small>{item.sector}</small></div></div></td><td className="numeric"><strong>₹{fmtMoney(item.price)}</strong></td><td className="numeric"><ChangePill pct={dayPct} /></td><td><Sparkline points={history} color={dayPct >= 0 ? "var(--gain)" : "var(--loss)"} /></td><td><div className="reason-cell">{item.is_new ? "Just added — building a baseline" : item.events?.length ? <><div className="signal-group-label">{item.events.length} signal{item.events.length === 1 ? "" : "s"} in one story</div>{item.events.slice(0, 2).map((event, index) => <span key={index}><i className={event.severity >= 60 ? "danger-dot" : "warning-dot"} />{event.headline}</span>)}{item.sector_context && <small className="sector-note-inline">{item.sector_context.summary}</small>}</> : <span className="muted">No meaningful change since last visit</span>}</div></td><td><span className="feed-badge" style={{ color: FEED_COLOR[item.feed_status], background: FEED_BG[item.feed_status] }}>{FEED_LABEL[item.feed_status]}</span></td><td><button className="remove-button" onClick={(event) => { event.stopPropagation(); onRemove(); }}>Remove</button></td></tr>;
+}
+
+function StockDetail({ item, history, onBack, onRemove }) {
+  const dayPct = pctChange(item.price, item.day_open); const sincePct = item.is_new ? 0 : pctChange(item.price, item.last_seen_price); const points = history.length > 1 ? history : Array.from({ length: 12 }, (_, i) => item.price * (1 + Math.sin(i / 2) * 0.007));
+  return <div className="detail-page"><button className="back-button" onClick={onBack}><Icon name="back" size={18} /> Back to overview</button><div className="detail-header"><div><div className="eyebrow">{item.sector} · {FEED_LABEL[item.feed_status]} data</div><h1>{item.symbol}</h1><p className="muted">A closer look at what changed since your last visit.</p></div><button className="secondary-button" onClick={onRemove}>Remove from watchlist</button></div><section className="detail-grid"><div className="detail-chart panel"><div className="panel-heading"><div><span className="eyebrow">Current price</span><div className="detail-price">₹{fmtMoney(item.price)}</div></div><ChangePill pct={dayPct} large /></div><div className="chart-area"><Sparkline points={points} width={640} height={210} color={dayPct >= 0 ? "var(--gain)" : "var(--loss)"} /></div><div className="chart-axis"><span>Earlier</span><span>Now</span></div></div><div className="detail-side"><div className="panel"><div className="panel-heading"><h2>What changed</h2><span className="attention-score large-score">{Math.round(item.attention_score || 0)}</span></div>{item.sector_context && <div className={`detail-context ${item.sector_context.kind}`}><strong>{item.sector_context.kind === "sector_wide" ? "Sector context" : "Peer context"}</strong><span>{item.sector_context.summary}</span></div>}{item.events?.length ? <div className="event-stack">{item.events.map((event, index) => <div className="event-row" key={index}><i className={event.severity >= 60 ? "danger-dot" : "warning-dot"} /><div><strong>{event.headline}</strong><small>{event.detail}</small></div></div>)}</div> : <p className="muted">No meaningful change since your last visit.</p>}</div><div className="panel stats-panel"><div><span>Since last visit</span><strong className={sincePct >= 0 ? "gain-text" : "loss-text"}>{sincePct >= 0 ? "+" : ""}{sincePct.toFixed(2)}%</strong></div><div><span>Today</span><strong>{dayPct >= 0 ? "+" : ""}{dayPct.toFixed(2)}%</strong></div></div></div></section></div>;
+}
+
 // ---------- app ----------
 
 export default function App() {
@@ -311,6 +226,37 @@ export default function App() {
   });
   const [data, setData] = useState({ items: [], digest: [] });
   const [historyBySymbol, setHistoryBySymbol] = useState({});
+  const [lastAck, setLastAck] = useState(null);
+  const [selectedSymbol, setSelectedSymbol] = useState(null);
+  const wsRef = useRef(null);
+  const existingSymbols = useMemo(() => new Set(data.items.map((item) => item.symbol)), [data.items]);
+  async function refresh() { if (user) setData(await api.getWatchlist(user.user_id)); }
+  useEffect(() => { refresh(); }, [user]);
+  useEffect(() => { if (!user) return undefined; const id = setInterval(refresh, POLL_MS); return () => clearInterval(id); }, [user]);
+  useEffect(() => {
+    if (!user) return undefined;
+    const ws = new WebSocket(api.wsUrl()); wsRef.current = ws;
+    ws.onmessage = (msg) => { const tick = JSON.parse(msg.data); setHistoryBySymbol((prev) => { const arr = prev[tick.symbol] ? [...prev[tick.symbol]] : []; arr.push(tick.price); if (arr.length > HISTORY_LEN) arr.shift(); return { ...prev, [tick.symbol]: arr }; }); setData((prev) => ({ ...prev, items: prev.items.map((item) => item.symbol === tick.symbol ? { ...item, price: tick.price } : item) })); };
+    return () => ws.close();
+  }, [user]);
+  async function handleAck() { await api.ack(user.user_id); setLastAck(new Date().toISOString()); refresh(); }
+  if (!user) return <LoginGate onLogin={setUser} />;
+  const sorted = [...data.items].sort((a, b) => (b.attention_score || 0) - (a.attention_score || 0));
+  const selectedItem = data.items.find((item) => item.symbol === selectedSymbol);
+  const attentionCount = data.items.filter((item) => (item.attention_score || 0) > 30).length;
+  return <div className="app-shell"><header className="topbar"><div className="brand-lockup"><Logo /><span>Ledger</span></div><div className="topbar-search"><AddSymbol userId={user.user_id} onAdded={refresh} existingSymbols={existingSymbols} /></div><div className="topbar-actions"><button className="seen-button" onClick={handleAck}><Icon name="check" size={15} /> Mark all as seen</button><div className="avatar">{user.username.slice(0, 1).toUpperCase()}</div></div></header>
+    <main className="dashboard-content">{selectedItem ? <StockDetail item={selectedItem} history={historyBySymbol[selectedItem.symbol] || []} onBack={() => setSelectedSymbol(null)} onRemove={() => api.removeSymbol(user.user_id, selectedSymbol).then(() => { setSelectedSymbol(null); refresh(); })} /> : <>
+      <section className="welcome-row"><div><div className="eyebrow">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</div><h1>Welcome back, {user.username}</h1><p className="muted">Here’s what moved while you were away.</p></div><div className="welcome-stat"><span>Tracking</span><strong>{data.items.length} <small>stocks</small></strong></div></section>
+      <section className="summary-banner"><div className="summary-icon"><Icon name="eye" size={21} /></div><div><strong>{attentionCount ? `${attentionCount} ${attentionCount === 1 ? "stock needs" : "stocks need"} your attention` : "Your watchlist is calm"}</strong><p>{attentionCount ? "Ranked by the significance of their movement since your last visit." : "No meaningful changes have been detected since your last visit."}</p></div><button className="text-button" onClick={handleAck}>Mark everything seen <Icon name="arrow" size={14} /></button></section>
+      <div className="section-heading"><div><h2>Attention needed</h2><p>Signals ranked by what deserves a closer look.</p></div><span className="section-count">{data.digest.length} signals</span></div>
+      {data.digest.length ? <section className="attention-grid">{data.digest.slice(0, 4).map((item) => <AttentionCard key={item.symbol} item={item} onOpen={setSelectedSymbol} />)}</section> : <div className="empty-state">Your watchlist is quiet. Add stocks below to start tracking meaningful changes.</div>}
+      <section className="watchlist-section"><div className="section-heading"><div><h2>Your watchlist</h2><p>Current prices and the reason behind every flag.</p></div><AddSymbol userId={user.user_id} onAdded={refresh} existingSymbols={existingSymbols} compact /></div>
+        {data.items.length ? <div className="table-wrap"><table><thead><tr>{["Stock", "Price", "Today", "Trend", "Since you checked", "Feed", ""].map((head, i) => <th className={i === 1 || i === 2 ? "numeric" : ""} key={head}>{head}</th>)}</tr></thead><tbody>{sorted.map((item) => <StockRow key={item.symbol} item={item} history={historyBySymbol[item.symbol] || []} onOpen={setSelectedSymbol} onRemove={() => api.removeSymbol(user.user_id, item.symbol).then(refresh)} />)}</tbody></table></div> : null}
+        <div className="table-footer">{data.items.length} symbol{data.items.length === 1 ? "" : "s"} tracked · last marked as seen {lastAck ? timeAgo(lastAck) : "not yet"}</div>
+      </section>
+    </>}</main></div>;
+  }
+  /*
   const [lastAck, setLastAck] = useState(null);
   const [highlightSymbol, setHighlightSymbol] = useState(null);
   const rowRefs = useRef({});
@@ -462,3 +408,4 @@ export default function App() {
     </div>
   );
 }
+*/

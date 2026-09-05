@@ -9,7 +9,7 @@ from sqlalchemy import select
 from . import db as dbm
 from .schemas import UserCreate, WatchlistAdd
 from .price_engine import engine as price_engine
-from .change_engine import compute_events, attention_score, events_to_dicts
+from .change_engine import compute_events, attention_score, events_to_dicts, sector_context
 
 app = FastAPI(title="Smart Market Watchlist")
 
@@ -36,13 +36,16 @@ def get_or_error_user(db: Session, user_id: int) -> dbm.User:
     return user
 
 
-def build_item_payload(item: dbm.WatchlistItem, snap: dict) -> dict:
+def build_item_payload(item: dbm.WatchlistItem, snap: dict, all_snaps: list[dict]) -> dict:
     is_new = item.last_seen_at is None
     last_seen = None
     if not is_new:
         last_seen = {"price": item.last_seen_price, "volume": item.last_seen_volume}
     events = compute_events(last_seen, snap)
     score = attention_score(events, is_new)
+    peer_context = sector_context(snap, all_snaps)
+    for event in events:
+        event.detail = f"{event.detail} {peer_context['summary']}"
     return {
         **snap,
         "watchlist_item_id": item.id,
@@ -51,6 +54,7 @@ def build_item_payload(item: dbm.WatchlistItem, snap: dict) -> dict:
         "last_seen_price": item.last_seen_price,
         "last_seen_at": item.last_seen_at.isoformat() if item.last_seen_at else None,
         "events": events_to_dicts(events),
+        "sector_context": peer_context,
         "attention_score": score,
     }
 
@@ -94,12 +98,13 @@ def get_watchlist(user_id: int, db: Session = Depends(dbm.get_session)):
     ).scalars().all()
 
     payload = []
+    all_snaps = price_engine.all_snapshots()
+    snapshots_by_symbol = {snap["symbol"]: snap for snap in all_snaps}
     for item in items:
-        try:
-            snap = price_engine.snapshot(item.symbol)
-        except KeyError:
+        snap = snapshots_by_symbol.get(item.symbol)
+        if snap is None:
             continue
-        payload.append(build_item_payload(item, snap))
+        payload.append(build_item_payload(item, snap, all_snaps))
 
     payload.sort(key=lambda p: -p["attention_score"])
     digest = [p for p in payload if p["attention_score"] >= 25][:5]
