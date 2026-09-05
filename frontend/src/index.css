@@ -1,0 +1,58 @@
+:root {
+  /* Groww-style light theme: white cards on a soft gray-blue canvas,
+     signature teal-green for brand/positive, warm red for negative. */
+  --canvas: #f6f7fb;
+  --panel: #ffffff;
+  --panel-raised: #ffffff;
+  --border: #e7e9f2;
+  --border-soft: #eef0f6;
+  --text: #1d2129;
+  --text-muted: #6b7280;
+  --text-faint: #9aa0ab;
+
+  --brand: #00d09c;
+  --brand-dark: #00b386;
+  --brand-tint: #e3faf3;
+
+  --amber: #ff9500;
+  --amber-tint: #fff4e5;
+
+  --gain: #00b386;
+  --gain-tint: #e3faf3;
+  --loss: #ff5647;
+  --loss-tint: #ffece9;
+  --stale: #9aa0ab;
+
+  --shadow-card: 0 1px 2px rgba(23, 26, 33, 0.04), 0 4px 16px rgba(23, 26, 33, 0.04);
+
+  --font-display: "Inter", -apple-system, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; }
+
+button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+input { font-family: inherit; color: inherit; }
+
+::selection { background: var(--brand-tint); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
