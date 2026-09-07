@@ -44,11 +44,7 @@ def price_move_event(last_seen_price, current_price, return_vol) -> ChangeEvent 
     pct = (current_price - last_seen_price) / last_seen_price
     if abs(pct) < 0.0005:
         return None
-    # z-score of this move against the symbol's own typical tick volatility.
-    # return_vol is a per-tick stddev; treat the move as ~ sum of ticks since
-    # last view, so scale loosely — this is intentionally a heuristic, not
-    # a rigorous stats model, tuned to feel right rather than be exact.
-    baseline = max(return_vol, 0.003) * 4  # rough "typical move since last check"
+    baseline = max(return_vol, 0.003) * 4
     z = abs(pct) / baseline
     severity = _clip(round(z * 35))
     direction = "up" if pct > 0 else "down"
@@ -79,9 +75,6 @@ def volume_spike_event(volume_today, avg_volume) -> ChangeEvent | None:
 
 
 def level_cross_event(last_seen_price, current_price, period_high, period_low, prev_close) -> ChangeEvent | None:
-    # Nothing can be "crossed" without a prior snapshot to compare against —
-    # for a brand-new watchlist item this must stay silent, not fire on the
-    # first observation just because last_seen_price is unset.
     if last_seen_price is None:
         return None
     events = []
@@ -116,6 +109,50 @@ def feed_issue_event(feed_status, age_seconds) -> ChangeEvent | None:
     )
 
 
+def rsi_regime_event(last_rsi, current_rsi) -> ChangeEvent | None:
+    if last_rsi is None or current_rsi is None:
+        return None
+    if last_rsi < 70 <= current_rsi:
+        return ChangeEvent("rsi_overbought", 62, "Freshly entered overbought territory", f"RSI(14) moved from {last_rsi:.0f} to {current_rsi:.0f}, above the 70 threshold since your last visit.")
+    if last_rsi > 30 >= current_rsi:
+        return ChangeEvent("rsi_oversold", 62, "Freshly entered oversold territory", f"RSI(14) moved from {last_rsi:.0f} to {current_rsi:.0f}, below the 30 threshold since your last visit.")
+    return None
+
+
+def moving_average_cross_event(last_short, last_long, current_short, current_long) -> ChangeEvent | None:
+    if None in (last_short, last_long, current_short, current_long):
+        return None
+    if last_short <= last_long and current_short > current_long:
+        return ChangeEvent("golden_cross", 68, "Short-term trend crossed above long-term trend", f"MA(10) crossed above MA(30): {current_short:.2f} vs {current_long:.2f}.")
+    if last_short >= last_long and current_short < current_long:
+        return ChangeEvent("death_cross", 68, "Short-term trend crossed below long-term trend", f"MA(10) crossed below MA(30): {current_short:.2f} vs {current_long:.2f}.")
+    return None
+
+
+def buy_pressure_shift_event(last_pressure, current_pressure) -> ChangeEvent | None:
+    """Flags a MEANINGFUL shift in the derived buy/sell pressure proxy since
+    the user's last visit — not just 'pressure is currently skewed', but
+    'it moved into a skew it wasn't in last time you looked'. Kept separate
+    from the raw stat (which is always shown) so a persistently-skewed but
+    unchanged stock doesn't get re-flagged every visit."""
+    if last_pressure is None or current_pressure is None:
+        return None
+    was_skewed = abs(last_pressure - 50) >= 15
+    is_skewed = abs(current_pressure - 50) >= 15
+    if not is_skewed:
+        return None
+    if was_skewed and (last_pressure - 50) * (current_pressure - 50) > 0:
+        return None  # already skewed the same direction last time you checked — not new
+    label = "buying" if current_pressure > 50 else "selling"
+    severity = _clip(round(abs(current_pressure - 50) * 1.8))
+    return ChangeEvent(
+        type="buy_pressure_shift",
+        severity=severity,
+        headline=f"{label.capitalize()} pressure building ({current_pressure:.0f}% {label})",
+        detail="Derived from recent tick direction x volume — a simulated order-flow proxy, not real order-book data.",
+    )
+
+
 def compute_events(last_seen: dict | None, current: dict) -> list[ChangeEvent]:
     events = []
     last_price = last_seen["price"] if last_seen else None
@@ -136,17 +173,35 @@ def compute_events(last_seen: dict | None, current: dict) -> list[ChangeEvent]:
     if e:
         events.append(e)
 
+    e = rsi_regime_event(last_seen.get("rsi_14") if last_seen else None, current.get("rsi_14"))
+    if e:
+        events.append(e)
+
+    e = moving_average_cross_event(
+        last_seen.get("short_ma") if last_seen else None,
+        last_seen.get("long_ma") if last_seen else None,
+        current.get("short_ma"),
+        current.get("long_ma"),
+    )
+    if e:
+        events.append(e)
+
+    e = buy_pressure_shift_event(
+        last_seen.get("buy_pressure_pct") if last_seen else None,
+        current.get("buy_pressure_pct"),
+    )
+    if e:
+        events.append(e)
+
     events.sort(key=lambda ev: -ev.severity)
     return events
 
 
 def attention_score(events: list[ChangeEvent], is_new: bool) -> int:
     if is_new:
-        return 0  # never-seen symbols aren't "changed", just new — kept out of the diff ranking
+        return 0
     if not events:
         return 0
-    # Diminishing-returns combine so 3 medium signals don't outrank 1 huge one unfairly,
-    # but still push a multi-signal symbol above a single-signal one of similar size.
     top = events[0].severity
     rest = sum(e.severity for e in events[1:]) * 0.25
     return _clip(round(top + rest))
@@ -156,14 +211,36 @@ def events_to_dicts(events: list[ChangeEvent]):
     return [asdict(e) for e in events]
 
 
-def sector_context(current: dict, peers: list[dict]) -> dict:
-    """Explain whether this symbol's move is shared by its sector peers."""
+def _peer_trend_up(peer: dict) -> bool | None:
+    """A peer's recent direction, using its own short/long moving average —
+    available for every symbol regardless of whether the viewer tracks it
+    (unlike 'since you personally last checked', which only exists for
+    symbols on THIS user's watchlist)."""
+    if peer.get("short_ma") is None or peer.get("long_ma") is None:
+        return None
+    return peer["short_ma"] >= peer["long_ma"]
+
+
+def sector_context(current: dict, peers: list[dict], own_move_pct: float | None = None) -> dict:
+    """Explain whether this symbol's move is shared by its sector peers.
+
+    `own_move_pct` should be the SAME "since you last checked" move used in
+    the price_move event for this symbol, so the direction word here never
+    contradicts that event (e.g. "up 6.5%" next to "moving down"). Peers
+    don't have a personal last-seen snapshot for this viewer, so their
+    direction is approximated from their own short/long moving-average
+    trend instead — a different but self-consistent basis, made explicit
+    here rather than silently mixed with a third timeframe (today's
+    prev_close move), which is what caused the original mismatch.
+    """
     same_sector = [peer for peer in peers if peer.get("sector") == current.get("sector") and peer.get("symbol") != current.get("symbol")]
-    movers = [peer for peer in same_sector if abs((peer["price"] - peer["prev_close"]) / peer["prev_close"]) >= 0.01]
-    current_move = (current["price"] - current["prev_close"]) / current["prev_close"] if current["prev_close"] else 0
-    direction = "up" if current_move >= 0 else "down"
-    aligned = [peer for peer in movers if ((peer["price"] - peer["prev_close"]) >= 0) == (current_move >= 0)]
-    high_count = sum(1 for peer in same_sector if peer["price"] >= peer["period_high"] * 0.9995)
+    if own_move_pct is None:
+        own_move_pct = (current["price"] - current["prev_close"]) / current["prev_close"] if current.get("prev_close") else 0
+    direction = "up" if own_move_pct >= 0 else "down"
+
+    peer_trends = [(peer, _peer_trend_up(peer)) for peer in same_sector]
+    movers = [peer for peer, trend in peer_trends if trend is not None]
+    aligned = [peer for peer, trend in peer_trends if trend is not None and trend == (own_move_pct >= 0)]
     sector = current.get("sector", "the sector")
     total = len(same_sector) + 1
 
@@ -184,6 +261,5 @@ def sector_context(current: dict, peers: list[dict]) -> dict:
         "peer_count": len(same_sector),
         "aligned_count": len(aligned),
         "movers_count": len(movers),
-        "at_high_count": high_count,
         "total_count": total,
     }
