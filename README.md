@@ -4,12 +4,12 @@ Built for CODE 2026 (Groww).
 
 ## Live deployment
 
-- ✅ GitHub — latest code pushed
-- ✅ Render — FastAPI backend live
-- ✅ Finnhub — API key configured
-- ✅ Vercel — frontend live
-- ✅ `VITE_API_URL` — correctly points to Render
-- ✅ Login/API connection — verified working end to end
+-  GitHub — latest code pushed
+-  Render — FastAPI backend live
+-  Finnhub — API key configured
+-  Vercel — frontend live
+-  `VITE_API_URL` — correctly points to Render
+-  Login/API connection — verified working end to end
 
 **Live app:** [https://ledger-zeta-eosin.vercel.app/](https://ledger-zeta-eosin.vercel.app/)
 
